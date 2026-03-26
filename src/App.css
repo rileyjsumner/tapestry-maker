@@ -1,0 +1,226 @@
+.app {
+  display: grid;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+@media (min-width: 960px) {
+  .app {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  text-align: left;
+}
+
+.subtitle {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.project-form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.project-form label {
+  font-size: 0.9rem;
+  color: var(--text-h);
+}
+
+.project-form input,
+.project-form button {
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.625rem;
+}
+
+.project-form button {
+  margin-top: 0.5rem;
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.error-message {
+  margin-top: 0.75rem;
+  color: #d14343;
+}
+
+.file-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.file-actions button {
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.625rem;
+  background: transparent;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.mode-toggle button,
+.crochet-controls button {
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.625rem;
+  background: transparent;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.mode-toggle button.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-border) inset;
+  background: var(--accent-bg);
+}
+
+.palette-controls {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.palette-controls label {
+  font-size: 0.9rem;
+  color: var(--text-h);
+}
+
+.palette-controls input {
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.625rem;
+}
+
+.brush-list {
+  max-height: 55svh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.brush-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.375rem 0.5rem;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.brush-row.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-border) inset;
+}
+
+.brush-row span {
+  color: var(--text-h);
+}
+
+.brush-row input[type='color'] {
+  width: 2.2rem;
+  height: 2rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.crochet-row-status {
+  margin: 0 0 1rem;
+  color: var(--text-h);
+}
+
+.crochet-controls {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+}
+
+.empty-state {
+  color: var(--text);
+}
+
+.grid-scroll {
+  max-width: 100%;
+  max-height: 70svh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem;
+  background: var(--bg);
+}
+
+.pixel-grid {
+  display: grid;
+  gap: 1px;
+  width: max-content;
+}
+
+.pixel-cell {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: crosshair;
+  padding: 0;
+}
+
+.pixel-grid.is-crochet-mode .pixel-cell {
+  cursor: default;
+}
+
+.pixel-cell.crochet-active-row {
+  box-shadow: 0 0 0 1px #f59e0b inset;
+}
+
+.pixel-cell.crochet-completed-row {
+  opacity: 0.5;
+}
+
+.stitch-count-chip {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 86%, #f59e0b 14%);
+  color: var(--text-h);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  padding: 0 4px;
+  pointer-events: none;
+}
