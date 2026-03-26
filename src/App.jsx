@@ -4,6 +4,8 @@ import CrochetPanel from './components/CrochetPanel'
 import PalettePanel from './components/PalettePanel'
 import PixelGrid from './components/PixelGrid'
 import ProjectForm from './components/ProjectForm'
+import TopNav from './components/TopNav'
+import quantizeMedianCut from './utils/quantizeMedianCut'
 
 const DEFAULT_PALETTE = ['#111111', '#ffffff', '#d14343', '#3b82f6']
 
@@ -22,6 +24,12 @@ function App() {
   const [activeCrochetRow, setActiveCrochetRow] = useState(0)
 
   const fileInputRef = useRef(null)
+  const imageInputRef = useRef(null)
+
+  const rgbToHex = (r, g, b) => {
+    const toTwo = (value) => value.toString(16).padStart(2, '0')
+    return `#${toTwo(r)}${toTwo(g)}${toTwo(b)}`
+  }
 
   const handleCreateProject = (event) => {
     event.preventDefault()
@@ -51,6 +59,21 @@ function App() {
     setPixelColors(Array.from({ length: parsedWidth * parsedHeight }, () => '#ffffff'))
     setEditorMode('edit')
     setActiveCrochetRow(parsedHeight - 1)
+  }
+
+  const handleNewProject = () => {
+    setProject(null)
+    setPixelColors([])
+    setEditorMode('edit')
+    setSelectedBrushIndex(0)
+    setPaletteColors(DEFAULT_PALETTE)
+    setColorCount('4')
+    setErrorMessage('')
+    setIsPainting(false)
+
+    const parsedHeight = Number.parseInt(heightInput, 10)
+    const nextRow = Number.isInteger(parsedHeight) && parsedHeight > 0 ? parsedHeight - 1 : 0
+    setActiveCrochetRow(nextRow)
   }
 
   const handleColorCountChange = (nextInputValue) => {
@@ -312,99 +335,208 @@ function App() {
     reader.readAsText(file)
   }
 
+  const openImageDialog = () => {
+    imageInputRef.current?.click()
+  }
+
+  const handleImageFilePicked = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      if (!project) {
+        return
+      }
+
+      const desiredCountRaw = Number.parseInt(colorCount, 10)
+      const desiredCount = Number.isNaN(desiredCountRaw)
+        ? 1
+        : Math.max(1, Math.min(64, desiredCountRaw))
+
+      setErrorMessage('')
+      setIsPainting(false)
+
+      const bitmap =
+        typeof createImageBitmap === 'function'
+          ? await createImageBitmap(file)
+          : await new Promise((resolve, reject) => {
+              const img = new Image()
+              const objectUrl = URL.createObjectURL(file)
+              img.onload = () => {
+                URL.revokeObjectURL(objectUrl)
+                resolve(img)
+              }
+              img.onerror = () => {
+                URL.revokeObjectURL(objectUrl)
+                reject(new Error('Failed to decode image.'))
+              }
+              img.src = objectUrl
+            })
+
+      const canvas = document.createElement('canvas')
+      canvas.width = project.width
+      canvas.height = project.height
+
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })
+      if (!ctx) {
+        throw new Error('Unable to create canvas context.')
+      }
+
+      // Composite over white so transparent images still quantize predictably.
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+      const pixels = []
+      // Extract RGB triples (skip alpha, we already composited to white).
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        pixels.push([
+          imageData.data[i],
+          imageData.data[i + 1],
+          imageData.data[i + 2],
+        ])
+      }
+
+      const { palette, indexMap } = quantizeMedianCut(pixels, desiredCount)
+      if (!palette.length || indexMap.length !== pixels.length) {
+        throw new Error('Failed to quantize image.')
+      }
+
+      const nextPaletteColors = palette.map((c) => rgbToHex(c.r, c.g, c.b))
+      const nextPixelColors = indexMap.map((paletteIndex) =>
+        nextPaletteColors[
+          Math.max(0, Math.min(nextPaletteColors.length - 1, paletteIndex))
+        ],
+      )
+
+      setPaletteColors(nextPaletteColors)
+      setColorCount(String(nextPaletteColors.length))
+      setSelectedBrushIndex(0)
+      setPixelColors(nextPixelColors)
+      setActiveCrochetRow(project.height - 1)
+      setEditorMode('edit')
+    } catch (err) {
+      const message =
+        err && typeof err === 'object' && 'message' in err ? err.message : 'Unknown error'
+      setErrorMessage(`Failed to import image: ${message}`)
+    } finally {
+      event.target.value = ''
+    }
+  }
+
   return (
-    <main className="app">
-      <section className="panel">
-        {!project ? (
-          <ProjectForm
-            projectName={projectName}
-            widthInput={widthInput}
-            heightInput={heightInput}
-            onProjectNameChange={setProjectName}
-            onWidthChange={setWidthInput}
-            onHeightChange={setHeightInput}
-            onSubmit={handleCreateProject}
-            errorMessage={errorMessage}
-          />
-        ) : (
-          <>
-            <div className="file-actions">
-              <button type="button" onClick={saveProjectAsTap}>
-                Save .tap
-              </button>
+    <>
+      <TopNav onNewProject={handleNewProject} />
+      <main className="app">
+        <section className="panel">
+          {!project ? (
+            <ProjectForm
+              projectName={projectName}
+              widthInput={widthInput}
+              heightInput={heightInput}
+              onProjectNameChange={setProjectName}
+              onWidthChange={setWidthInput}
+              onHeightChange={setHeightInput}
+              onSubmit={handleCreateProject}
+              errorMessage={errorMessage}
+            />
+          ) : (
+            <>
+              <div className="file-actions">
+                <button type="button" onClick={saveProjectAsTap}>
+                  Save .tap
+        </button>
 
-              <button type="button" onClick={openLoadDialog}>
-                Load .tap
-              </button>
+                <button type="button" onClick={openLoadDialog}>
+                  Load .tap
+                </button>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".tap,.json,application/json"
-                style={{ display: 'none' }}
-                onChange={handleTapFilePicked}
-              />
-            </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".tap,.json,application/json"
+                  style={{ display: 'none' }}
+                  onChange={handleTapFilePicked}
+                />
+        </div>
 
-            <div className="mode-toggle">
-              <button
-                type="button"
-                className={editorMode === 'edit' ? 'is-active' : ''}
-                onClick={() => switchMode('edit')}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                className={editorMode === 'crochet' ? 'is-active' : ''}
-                onClick={() => switchMode('crochet')}
-              >
-                Crochet
-              </button>
-            </div>
+              <div className="mode-toggle">
+                <button
+                  type="button"
+                  className={editorMode === 'edit' ? 'is-active' : ''}
+                  onClick={() => switchMode('edit')}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className={editorMode === 'crochet' ? 'is-active' : ''}
+                  onClick={() => switchMode('crochet')}
+                >
+                  Crochet
+                </button>
+              </div>
 
-            {editorMode === 'edit' ? (
-              <PalettePanel
-                colorCount={colorCount}
-                paletteColors={paletteColors}
-                selectedBrushIndex={selectedBrushIndex}
-                onColorCountChange={handleColorCountChange}
-                onSelectBrush={setSelectedBrushIndex}
-                onUpdateBrushColor={updateBrushColor}
-              />
-            ) : (
-              <CrochetPanel
-                activeRow={activeCrochetRow}
-                totalRows={project.height}
-                onNextRow={goToNextCrochetRow}
-                onPreviousRow={goToPreviousCrochetRow}
-              />
-            )}
+              {editorMode === 'edit' ? (
+              <>
+                <div className="file-actions">
+                  <button type="button" onClick={openImageDialog}>
+                    Upload Image
+                  </button>
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={handleImageFilePicked}
+                  />
+        </div>
 
-            {errorMessage && <p className="error-message">{errorMessage}</p>}
-          </>
-        )}
+                <PalettePanel
+                  colorCount={colorCount}
+                  paletteColors={paletteColors}
+                  selectedBrushIndex={selectedBrushIndex}
+                  onColorCountChange={handleColorCountChange}
+                  onSelectBrush={setSelectedBrushIndex}
+                  onUpdateBrushColor={updateBrushColor}
+                />
+              </>
+              ) : (
+                <CrochetPanel
+                  activeRow={activeCrochetRow}
+                  totalRows={project.height}
+                  onNextRow={goToNextCrochetRow}
+                  onPreviousRow={goToPreviousCrochetRow}
+                />
+              )}
+
+              {errorMessage && <p className="error-message">{errorMessage}</p>}
+            </>
+          )}
       </section>
 
-      <section className="panel">
-        {project ? (
-          <PixelGrid
-            project={project}
-            pixelColors={pixelColors}
-            editorMode={editorMode}
-            activeCrochetRow={activeCrochetRow}
-            activeRowRuns={activeRowRuns}
-            onPixelPointerDown={handlePixelPointerDown}
-            onPixelPointerEnter={handlePixelPointerEnter}
-            onStopPainting={stopPainting}
-          />
-        ) : (
-          <p className="empty-state">
-            Your grid will appear here after you create a project.
-          </p>
-        )}
-      </section>
-    </main>
+        <section className="panel">
+          {project ? (
+            <PixelGrid
+              project={project}
+              pixelColors={pixelColors}
+              editorMode={editorMode}
+              activeCrochetRow={activeCrochetRow}
+              activeRowRuns={activeRowRuns}
+              onPixelPointerDown={handlePixelPointerDown}
+              onPixelPointerEnter={handlePixelPointerEnter}
+              onStopPainting={stopPainting}
+            />
+          ) : (
+            <p className="empty-state">
+              Your grid will appear here after you create a project.
+            </p>
+          )}
+        </section>
+      </main>
+    </>
   )
 }
 
