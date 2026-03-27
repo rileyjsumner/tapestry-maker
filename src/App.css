@@ -186,6 +186,56 @@
   color: var(--text-h);
 }
 
+.crochet-panel {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.crochet-row-arrows {
+  min-width: 140px;
+  border-left: 1px solid var(--border);
+  padding-left: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.crochet-row-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.crochet-row-label {
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.crochet-arrow-toggle {
+  border: 1px solid var(--border);
+  background: transparent;
+  border-radius: 8px;
+  padding: 0.25rem;
+  cursor: pointer;
+  color: var(--text-h);
+}
+
+.crochet-arrow-toggle:hover {
+  border-color: var(--accent-border);
+}
+
+.crochet-arrow-static {
+  display: inline-flex;
+  padding: 0.25rem;
+  color: var(--text-h);
+}
+
+.arrow-icon {
+  display: block;
+}
+
 .crochet-controls {
   display: grid;
   grid-template-columns: 1fr auto;

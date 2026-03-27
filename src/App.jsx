@@ -22,6 +22,7 @@ function App() {
   const [isPainting, setIsPainting] = useState(false)
   const [editorMode, setEditorMode] = useState('edit')
   const [activeCrochetRow, setActiveCrochetRow] = useState(0)
+  const [bottomRowDirection, setBottomRowDirection] = useState('right')
 
   const fileInputRef = useRef(null)
   const imageInputRef = useRef(null)
@@ -59,6 +60,7 @@ function App() {
     setPixelColors(Array.from({ length: parsedWidth * parsedHeight }, () => '#ffffff'))
     setEditorMode('edit')
     setActiveCrochetRow(parsedHeight - 1)
+    setBottomRowDirection('right')
   }
 
   const handleNewProject = () => {
@@ -74,6 +76,7 @@ function App() {
     const parsedHeight = Number.parseInt(heightInput, 10)
     const nextRow = Number.isInteger(parsedHeight) && parsedHeight > 0 ? parsedHeight - 1 : 0
     setActiveCrochetRow(nextRow)
+    setBottomRowDirection('right')
   }
 
   const handleColorCountChange = (nextInputValue) => {
@@ -186,6 +189,37 @@ function App() {
       setActiveCrochetRow(project.height - 1)
     }
   }
+
+  const toggleBottomRowDirection = () => {
+    setBottomRowDirection((prev) => (prev === 'right' ? 'left' : 'right'))
+  }
+
+  const crochetRowDirections = useMemo(() => {
+    if (!project || editorMode !== 'crochet') {
+      return []
+    }
+
+    const bottomRowIndex = project.height - 1
+    const rows = []
+
+    for (let row = activeCrochetRow; row <= bottomRowIndex; row += 1) {
+      const distanceFromBottom = bottomRowIndex - row
+      const shouldFlip = distanceFromBottom % 2 === 1
+      const direction = shouldFlip
+        ? bottomRowDirection === 'right'
+          ? 'left'
+          : 'right'
+        : bottomRowDirection
+
+      rows.push({
+        rowIndex: row,
+        direction,
+        isBottomRow: row === bottomRowIndex,
+      })
+    }
+
+    return rows
+  }, [activeCrochetRow, bottomRowDirection, editorMode, project])
 
   const goToNextCrochetRow = () => {
     if (!project) {
@@ -318,6 +352,7 @@ function App() {
         setActiveCrochetRow(clampedRow)
         setIsPainting(false)
         setErrorMessage('')
+        setBottomRowDirection('right')
       } catch (err) {
         const message =
           err && typeof err === 'object' && 'message' in err ? err.message : 'Unknown error'
@@ -417,6 +452,7 @@ function App() {
       setPixelColors(nextPixelColors)
       setActiveCrochetRow(project.height - 1)
       setEditorMode('edit')
+      setBottomRowDirection('right')
     } catch (err) {
       const message =
         err && typeof err === 'object' && 'message' in err ? err.message : 'Unknown error'
@@ -509,6 +545,8 @@ function App() {
                   totalRows={project.height}
                   onNextRow={goToNextCrochetRow}
                   onPreviousRow={goToPreviousCrochetRow}
+                rowDirections={crochetRowDirections}
+                onToggleBottomDirection={toggleBottomRowDirection}
                 />
               )}
 
