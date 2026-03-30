@@ -6,6 +6,10 @@ import PixelGrid from './components/PixelGrid'
 import ProjectForm from './components/ProjectForm'
 import TopNav from './components/TopNav'
 import quantizeMedianCut from './utils/quantizeMedianCut'
+import {
+  getC2cTierCount,
+  getStitchRunsForTier,
+} from './utils/c2cTiers'
 
 const DEFAULT_PALETTE = ['#111111', '#ffffff', '#d14343', '#3b82f6']
 
@@ -22,6 +26,8 @@ function App() {
   const [isPainting, setIsPainting] = useState(false)
   const [editorMode, setEditorMode] = useState('edit')
   const [activeCrochetRow, setActiveCrochetRow] = useState(0)
+  const [activeC2cTier, setActiveC2cTier] = useState(0)
+  const [crochetPattern, setCrochetPattern] = useState('sideToSide')
   const [bottomRowDirection, setBottomRowDirection] = useState('right')
 
   const fileInputRef = useRef(null)
@@ -60,6 +66,8 @@ function App() {
     setPixelColors(Array.from({ length: parsedWidth * parsedHeight }, () => '#ffffff'))
     setEditorMode('edit')
     setActiveCrochetRow(parsedHeight - 1)
+    setActiveC2cTier(0)
+    setCrochetPattern('sideToSide')
     setBottomRowDirection('right')
   }
 
@@ -76,6 +84,8 @@ function App() {
     const parsedHeight = Number.parseInt(heightInput, 10)
     const nextRow = Number.isInteger(parsedHeight) && parsedHeight > 0 ? parsedHeight - 1 : 0
     setActiveCrochetRow(nextRow)
+    setActiveC2cTier(0)
+    setCrochetPattern('sideToSide')
     setBottomRowDirection('right')
   }
 
@@ -125,6 +135,15 @@ function App() {
       return []
     }
 
+    if (crochetPattern === 'cornerToCorner') {
+      return getStitchRunsForTier(
+        pixelColors,
+        project.width,
+        project.height,
+        activeC2cTier,
+      )
+    }
+
     const rowStartIndex = activeCrochetRow * project.width
     const rowColors = pixelColors.slice(rowStartIndex, rowStartIndex + project.width)
     if (rowColors.length === 0) {
@@ -145,7 +164,14 @@ function App() {
 
     runs.push({ startCol: runStart, length: rowColors.length - runStart, color: runColor })
     return runs
-  }, [activeCrochetRow, editorMode, pixelColors, project])
+  }, [
+    activeC2cTier,
+    activeCrochetRow,
+    crochetPattern,
+    editorMode,
+    pixelColors,
+    project,
+  ])
 
   const paintPixel = (pixelIndex) => {
     setPixelColors((previousPixels) => {
@@ -184,8 +210,23 @@ function App() {
     }
     setEditorMode(nextMode)
     if (nextMode === 'crochet') {
-      // Fresh crochet start defaults to the bottom row.
-      // Import logic restores `activeCrochetRow` and does NOT trigger this switchMode path.
+      // Fresh crochet start defaults to the bottom row (side-to-side) / tier 0 (C2C).
+      // Import logic restores progress and does NOT trigger this switchMode path.
+      setActiveCrochetRow(project.height - 1)
+      setActiveC2cTier(0)
+    }
+  }
+
+  const handleCrochetPatternChange = (nextPattern) => {
+    if (!project || nextPattern === crochetPattern) {
+      return
+    }
+    setCrochetPattern(nextPattern)
+    if (nextPattern === 'sideToSide') {
+      setActiveCrochetRow(project.height - 1)
+      setActiveC2cTier(0)
+    } else {
+      setActiveC2cTier(0)
       setActiveCrochetRow(project.height - 1)
     }
   }
@@ -197,6 +238,24 @@ function App() {
   const crochetRowDirections = useMemo(() => {
     if (!project || editorMode !== 'crochet') {
       return []
+    }
+
+    if (crochetPattern === 'cornerToCorner') {
+      const rows = []
+      for (let tierIndex = 0; tierIndex <= activeC2cTier; tierIndex += 1) {
+        const shouldFlip = tierIndex % 2 === 1
+        const direction = shouldFlip
+          ? bottomRowDirection === 'right'
+            ? 'left'
+            : 'right'
+          : bottomRowDirection
+        rows.push({
+          tierIndex,
+          direction,
+          isToggleTier: tierIndex === 0,
+        })
+      }
+      return rows
     }
 
     const bottomRowIndex = project.height - 1
@@ -219,10 +278,22 @@ function App() {
     }
 
     return rows
-  }, [activeCrochetRow, bottomRowDirection, editorMode, project])
+  }, [
+    activeC2cTier,
+    activeCrochetRow,
+    bottomRowDirection,
+    crochetPattern,
+    editorMode,
+    project,
+  ])
 
   const goToNextCrochetRow = () => {
     if (!project) {
+      return
+    }
+    if (crochetPattern === 'cornerToCorner') {
+      const maxTier = getC2cTierCount(project.width, project.height) - 1
+      setActiveC2cTier((previous) => Math.min(maxTier, previous + 1))
       return
     }
     setActiveCrochetRow((previousRow) => Math.max(0, previousRow - 1))
@@ -230,6 +301,10 @@ function App() {
 
   const goToPreviousCrochetRow = () => {
     if (!project) {
+      return
+    }
+    if (crochetPattern === 'cornerToCorner') {
+      setActiveC2cTier((previous) => Math.max(0, previous - 1))
       return
     }
     setActiveCrochetRow((previousRow) => Math.min(project.height - 1, previousRow + 1))
@@ -247,7 +322,7 @@ function App() {
     if (!project) return null
 
     return {
-      version: 1,
+      version: 2,
       project: {
         name: project.name,
         width: project.width,
@@ -258,6 +333,8 @@ function App() {
       progress: {
         editorMode,
         activeCrochetRow,
+        activeC2cTier,
+        crochetPattern,
       },
     }
   }
@@ -300,7 +377,7 @@ function App() {
         const text = String(reader.result)
         const parsed = JSON.parse(text)
 
-        if (!parsed || parsed.version !== 1) {
+        if (!parsed || (parsed.version !== 1 && parsed.version !== 2)) {
           throw new Error('Unsupported or missing .tap version.')
         }
         if (!parsed.project) {
@@ -336,6 +413,17 @@ function App() {
 
         const clampedRow = Math.max(0, Math.min(nextHeight - 1, savedRow))
 
+        const maxTierIndex = nextWidth + nextHeight - 2
+        const savedPattern =
+          savedProgress.crochetPattern === 'cornerToCorner'
+            ? 'cornerToCorner'
+            : 'sideToSide'
+        const savedTier =
+          typeof savedProgress.activeC2cTier === 'number'
+            ? savedProgress.activeC2cTier
+            : 0
+        const clampedTier = Math.max(0, Math.min(maxTierIndex, savedTier))
+
         setProject({
           name: parsed.project.name || 'Imported Project',
           width: nextWidth,
@@ -350,6 +438,8 @@ function App() {
 
         setPixelColors(nextPixelColors)
         setActiveCrochetRow(clampedRow)
+        setCrochetPattern(parsed.version >= 2 ? savedPattern : 'sideToSide')
+        setActiveC2cTier(parsed.version >= 2 ? clampedTier : 0)
         setIsPainting(false)
         setErrorMessage('')
         setBottomRowDirection('right')
@@ -451,6 +541,8 @@ function App() {
       setSelectedBrushIndex(0)
       setPixelColors(nextPixelColors)
       setActiveCrochetRow(project.height - 1)
+      setActiveC2cTier(0)
+      setCrochetPattern('sideToSide')
       setEditorMode('edit')
       setBottomRowDirection('right')
     } catch (err) {
@@ -543,10 +635,12 @@ function App() {
                 <CrochetPanel
                   activeRow={activeCrochetRow}
                   totalRows={project.height}
+                  activeC2cTier={activeC2cTier}
+                  c2cTierCount={getC2cTierCount(project.width, project.height)}
+                  crochetPattern={crochetPattern}
+                  onCrochetPatternChange={handleCrochetPatternChange}
                   onNextRow={goToNextCrochetRow}
                   onPreviousRow={goToPreviousCrochetRow}
-                rowDirections={crochetRowDirections}
-                onToggleBottomDirection={toggleBottomRowDirection}
                 />
               )}
 
@@ -561,8 +655,12 @@ function App() {
               project={project}
               pixelColors={pixelColors}
               editorMode={editorMode}
+              crochetPattern={crochetPattern}
               activeCrochetRow={activeCrochetRow}
+              activeC2cTier={activeC2cTier}
               activeRowRuns={activeRowRuns}
+              rowDirections={crochetRowDirections}
+              onToggleBottomDirection={toggleBottomRowDirection}
               onPixelPointerDown={handlePixelPointerDown}
               onPixelPointerEnter={handlePixelPointerEnter}
               onStopPainting={stopPainting}

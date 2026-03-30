@@ -120,6 +120,29 @@
   background: var(--accent-bg);
 }
 
+.crochet-pattern-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.crochet-pattern-toggle button {
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.5rem;
+  background: transparent;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.crochet-pattern-toggle button.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-border) inset;
+  background: var(--accent-bg);
+}
+
 .palette-controls {
   display: grid;
   gap: 0.5rem;
@@ -186,54 +209,86 @@
   color: var(--text-h);
 }
 
-.crochet-panel {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.75rem;
-  align-items: start;
+.crochet-c2c-layout {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.crochet-c2c-rotated-grid {
+  display: flex;
+  width: max-content;
+  max-width: none;
+  flex-shrink: 0;
+}
+
+.pixel-grid-and-arrows {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 1px;
+  width: max-content;
 }
 
 .crochet-row-arrows {
-  min-width: 140px;
-  border-left: 1px solid var(--border);
-  padding-left: 0.75rem;
-  display: grid;
-  gap: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 1.125rem;
+}
+
+.crochet-arrows-spacer {
+  flex-shrink: 0;
+  width: 100%;
 }
 
 .crochet-row-arrow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.crochet-row-label {
-  font-size: 0.85rem;
-  color: var(--text);
+  justify-content: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .crochet-arrow-toggle {
-  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
   background: transparent;
-  border-radius: 8px;
-  padding: 0.25rem;
   cursor: pointer;
   color: var(--text-h);
+  line-height: 0;
 }
 
 .crochet-arrow-toggle:hover {
-  border-color: var(--accent-border);
+  color: var(--accent);
 }
 
 .crochet-arrow-static {
   display: inline-flex;
-  padding: 0.25rem;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
   color: var(--text-h);
 }
 
 .arrow-icon {
   display: block;
+}
+
+.crochet-c2c-arrow {
+  position: absolute;
+  z-index: 2;
+  line-height: 0;
+  pointer-events: none;
+}
+
+.crochet-c2c-arrow .crochet-arrow-toggle {
+  pointer-events: auto;
 }
 
 .crochet-controls {
@@ -254,6 +309,11 @@
   border-radius: 8px;
   padding: 0.5rem;
   background: var(--bg);
+}
+
+.grid-scroll--c2c {
+  max-height: min(85svh, 920px);
+  overflow: auto;
 }
 
 .pixel-grid {
