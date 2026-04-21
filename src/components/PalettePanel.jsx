@@ -8,7 +8,6 @@ function PalettePanel({
 }) {
   return (
     <>
-      <h1>Palette</h1>
       <p className="subtitle">Choose brush colors for this project.</p>
 
       <div className="palette-controls">

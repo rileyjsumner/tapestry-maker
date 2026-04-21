@@ -10,7 +10,6 @@ function CrochetPanel({
 }) {
   return (
     <>
-      <h1>Crochet Mode</h1>
       <p className="subtitle">Follow the highlighted row while working your tapestry.</p>
 
       <div className="crochet-pattern-toggle" role="group" aria-label="Crochet pattern">

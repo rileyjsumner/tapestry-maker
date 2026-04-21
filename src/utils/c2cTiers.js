@@ -10,9 +10,9 @@ export function getC2cTierCount(width, height) {
 
 /**
  * @returns {number[]} Linear indices (row-major) in stitch order for tier `tierIndex`.
- * Tier 0 is bottom-left corner only. Tiers expand upward and rightward.
- * Cells satisfy: (row - col) + (height - 1) === tierIndex
- * => row = tierIndex - (height - 1) + col
+ * Tier 0 is at top-right. Tiers expand downward and leftward.
+ * Cells satisfy: col - row + (height - 1) === tierIndex
+ * => row = col - tierIndex + (height - 1)
  */
 export function getTierCellIndices(width, height, tierIndex) {
   const maxT = width + height - 2
@@ -22,7 +22,7 @@ export function getTierCellIndices(width, height, tierIndex) {
 
   const indices = []
   for (let col = 0; col < width; col += 1) {
-    const row = tierIndex - (height - 1) + col
+    const row = col - tierIndex + (height - 1)
     if (row >= 0 && row < height) {
       indices.push(row * width + col)
     }
@@ -68,14 +68,14 @@ export function getC2cStartTierIndex() {
 
 /**
  * Which anti-diagonal tier a pixel belongs to.
- * Tier 0 is at the bottom-left corner only.
- * Tiers expand upward and rightward (toward top-right) when rotated 45°.
- * Formula: (row - col) + (height - 1)
+ * Tier 0 is at the top-right corner.
+ * Tiers expand downward and leftward (toward bottom-left) when rotated 45°.
+ * Formula: col - row + (height - 1)
  */
 export function getTierIndexForPixelIndex(width, height, pixelIndex) {
   const col = pixelIndex % width
   const row = Math.floor(pixelIndex / width)
-  return (row - col) + (height - 1)
+  return col - row + (height - 1)
 }
 
 /** Center of tier in pixel coords (origin top-left of grid, y increases downward). */

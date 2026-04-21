@@ -17,6 +17,7 @@ function PixelGrid({
   activeC2cTier,
   activeRowRuns,
   rowDirections,
+  pixelZoom,
   onToggleBottomDirection,
   onPixelPointerDown,
   onPixelPointerEnter,
@@ -24,7 +25,7 @@ function PixelGrid({
 }) {
   const cellSize = 18
   const cellGap = 1
-  const cellPitch = cellSize + cellGap
+  const cellPitch = (cellSize + cellGap) * pixelZoom
 
   const isC2c = editorMode === 'crochet' && crochetPattern === 'cornerToCorner'
   const isSideToSide = editorMode === 'crochet' && crochetPattern === 'sideToSide'
@@ -42,7 +43,7 @@ function PixelGrid({
     }
     const gw = project.width * cellPitch - cellGap
     const gh = project.height * cellPitch - cellGap
-    const rad = Math.atan2(gw, gh)
+    const rad = -Math.atan2(gw, gh)
     const deg = (rad * 180) / Math.PI
     const margin = 16
     const aabbW = gw * Math.cos(rad) + gh * Math.sin(rad)
@@ -109,10 +110,11 @@ function PixelGrid({
     <div
       className={`pixel-grid ${editorMode === 'crochet' ? 'is-crochet-mode' : ''}`}
       style={{
-        gridTemplateColumns: `repeat(${project.width}, ${cellSize}px)`,
+        gridTemplateColumns: `repeat(${project.width}, ${cellSize * pixelZoom}px)`,
+        gap: `${cellGap * pixelZoom}px`,
         position: 'relative',
-        width: c2cGeometry ? c2cGeometry.gw : undefined,
-        height: c2cGeometry ? c2cGeometry.gh : undefined,
+        width: c2cGeometry ? c2cGeometry.gw * pixelZoom : undefined,
+        height: c2cGeometry ? c2cGeometry.gh * pixelZoom : undefined,
       }}
     >
       {pixelColors.map((colorValue, pixelIndex) => {
@@ -140,7 +142,11 @@ function PixelGrid({
             key={pixelIndex}
             type="button"
             className={`pixel-cell ${isActiveCrochet ? 'crochet-active-row' : ''} ${isCompletedCrochet ? 'crochet-completed-row' : ''}`}
-            style={{ backgroundColor: colorValue }}
+            style={{
+              backgroundColor: colorValue,
+              width: `${cellSize * pixelZoom}px`,
+              height: `${cellSize * pixelZoom}px`,
+            }}
             aria-label={`Pixel ${pixelIndex + 1}`}
             onPointerDown={
               editorMode === 'edit' ? () => onPixelPointerDown(pixelIndex) : undefined

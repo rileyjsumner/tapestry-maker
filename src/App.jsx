@@ -10,6 +10,8 @@ import {
   getC2cTierCount,
   getStitchRunsForTier,
 } from './utils/c2cTiers'
+import EditToolbar from './components/EditToolbar'
+import MergeBrushesModal from './components/MergeBrushesModal'
 
 const DEFAULT_PALETTE = ['#111111', '#ffffff', '#d14343', '#3b82f6']
 
@@ -29,6 +31,9 @@ function App() {
   const [activeC2cTier, setActiveC2cTier] = useState(0)
   const [crochetPattern, setCrochetPattern] = useState('sideToSide')
   const [bottomRowDirection, setBottomRowDirection] = useState('right')
+  const [editTool, setEditTool] = useState('brush')
+  const [showMergeModal, setShowMergeModal] = useState(false)
+  const [pixelZoom, setPixelZoom] = useState(1)
 
   const fileInputRef = useRef(null)
   const imageInputRef = useRef(null)
@@ -118,11 +123,21 @@ function App() {
   }
 
   const updateBrushColor = (brushIndex, nextColor) => {
+    const oldColor = paletteColors[brushIndex]
+    
     setPaletteColors((previousColors) =>
       previousColors.map((colorValue, index) =>
         index === brushIndex ? nextColor : colorValue,
       ),
     )
+    
+    if (oldColor !== nextColor) {
+      setPixelColors((previousPixels) =>
+        previousPixels.map((colorValue) =>
+          colorValue === oldColor ? nextColor : colorValue,
+        ),
+      )
+    }
   }
 
   const selectedBrushColor = useMemo(
@@ -178,12 +193,13 @@ function App() {
       if (!project || pixelIndex < 0 || pixelIndex >= previousPixels.length) {
         return previousPixels
       }
-      if (previousPixels[pixelIndex] === selectedBrushColor) {
+      const targetColor = editTool === 'eraser' ? '#ffffff' : selectedBrushColor
+      if (previousPixels[pixelIndex] === targetColor) {
         return previousPixels
       }
 
       const nextPixels = [...previousPixels]
-      nextPixels[pixelIndex] = selectedBrushColor
+      nextPixels[pixelIndex] = targetColor
       return nextPixels
     })
   }
@@ -233,6 +249,42 @@ function App() {
 
   const toggleBottomRowDirection = () => {
     setBottomRowDirection((prev) => (prev === 'right' ? 'left' : 'right'))
+  }
+
+  const handleZoomIn = () => {
+    setPixelZoom((prev) => Math.min(prev + 0.1, 2.0))
+  }
+
+  const handleZoomOut = () => {
+    setPixelZoom((prev) => Math.max(prev - 0.1, 0.1))
+  }
+
+  const handleMergeBrushes = (selectedIndices, targetColor) => {
+    if (selectedIndices.length < 2) {
+      return
+    }
+
+    const selectedColors = selectedIndices.map((i) => paletteColors[i])
+    const newPalette = paletteColors.filter(
+      (_, i) => !selectedIndices.includes(i),
+    )
+    newPalette.push(targetColor)
+
+    const newPixelColors = pixelColors.map((color) => {
+      if (selectedColors.includes(color)) {
+        return targetColor
+      }
+      return color
+    })
+
+    setPaletteColors(newPalette)
+    setColorCount(String(newPalette.length))
+    setPixelColors(newPixelColors)
+
+    const newSelectedIndex = newPalette.length - 1
+    setSelectedBrushIndex(newSelectedIndex)
+
+    setShowMergeModal(false)
   }
 
   const crochetRowDirections = useMemo(() => {
@@ -622,6 +674,12 @@ function App() {
                   />
         </div>
 
+                <EditToolbar
+                  editTool={editTool}
+                  onEditToolChange={setEditTool}
+                  onOpenMergeModal={() => setShowMergeModal(true)}
+                />
+
                 <PalettePanel
                   colorCount={colorCount}
                   paletteColors={paletteColors}
@@ -649,22 +707,54 @@ function App() {
           )}
       </section>
 
+      {showMergeModal && (
+        <MergeBrushesModal
+          paletteColors={paletteColors}
+          onConfirm={handleMergeBrushes}
+          onCancel={() => setShowMergeModal(false)}
+        />
+      )}
+
         <section className="panel">
           {project ? (
-            <PixelGrid
-              project={project}
-              pixelColors={pixelColors}
-              editorMode={editorMode}
-              crochetPattern={crochetPattern}
-              activeCrochetRow={activeCrochetRow}
-              activeC2cTier={activeC2cTier}
-              activeRowRuns={activeRowRuns}
-              rowDirections={crochetRowDirections}
-              onToggleBottomDirection={toggleBottomRowDirection}
-              onPixelPointerDown={handlePixelPointerDown}
-              onPixelPointerEnter={handlePixelPointerEnter}
-              onStopPainting={stopPainting}
-            />
+            <div className="pixel-grid-container">
+              <div className="pixel-zoom-controls">
+                <button
+                  type="button"
+                  className="pixel-zoom-btn"
+                  onClick={handleZoomOut}
+                  title="Zoom out"
+                  disabled={pixelZoom <= 0.1}
+                >
+                  −
+                </button>
+                <span className="pixel-zoom-level">{Math.round(pixelZoom * 100)}%</span>
+                <button
+                  type="button"
+                  className="pixel-zoom-btn"
+                  onClick={handleZoomIn}
+                  title="Zoom in"
+                  disabled={pixelZoom >= 2.0}
+                >
+                  +
+                </button>
+              </div>
+              <PixelGrid
+                project={project}
+                pixelColors={pixelColors}
+                editorMode={editorMode}
+                crochetPattern={crochetPattern}
+                activeCrochetRow={activeCrochetRow}
+                activeC2cTier={activeC2cTier}
+                activeRowRuns={activeRowRuns}
+                rowDirections={crochetRowDirections}
+                pixelZoom={pixelZoom}
+                onToggleBottomDirection={toggleBottomRowDirection}
+                onPixelPointerDown={handlePixelPointerDown}
+                onPixelPointerEnter={handlePixelPointerEnter}
+                onStopPainting={stopPainting}
+              />
+            </div>
           ) : (
             <p className="empty-state">
               Your grid will appear here after you create a project.
