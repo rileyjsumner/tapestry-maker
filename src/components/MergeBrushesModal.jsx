@@ -1,7 +1,11 @@
 import { useState } from 'react'
 
+import DmcPicker from './DmcPicker'
+import { getDmcByHex } from '../utils/dmc'
+
 function MergeBrushesModal({
   paletteColors,
+  craft,
   onConfirm,
   onCancel,
 }) {
@@ -44,7 +48,11 @@ function MergeBrushesModal({
                   className="merge-brush-swatch"
                   style={{ backgroundColor: color }}
                 />
-                <span className="merge-brush-hex">{color}</span>
+                <span className="merge-brush-hex">
+                  {craft === 'crossStitch' && getDmcByHex(color)
+                    ? `DMC ${getDmcByHex(color).number}`
+                    : color}
+                </span>
               </label>
             ))}
           </div>
@@ -53,13 +61,23 @@ function MergeBrushesModal({
         <div className="merge-modal-section">
           <label className="merge-modal-label">Merge color:</label>
           <div className="merge-color-picker">
-            <input
-              type="color"
-              value={targetColor}
-              onChange={(e) => setTargetColor(e.target.value)}
-              className="merge-color-input"
-            />
-            <span className="merge-color-hex">{targetColor}</span>
+            {craft === 'crossStitch' ? (
+              <DmcPicker
+                value={targetColor}
+                ariaLabel="Merge DMC color"
+                onChange={setTargetColor}
+              />
+            ) : (
+              <>
+                <input
+                  type="color"
+                  value={targetColor}
+                  onChange={(e) => setTargetColor(e.target.value)}
+                  className="merge-color-input"
+                />
+                <span className="merge-color-hex">{targetColor}</span>
+              </>
+            )}
           </div>
         </div>
 
