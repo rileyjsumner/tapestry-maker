@@ -12,8 +12,22 @@ import {
 } from './utils/c2cTiers'
 import EditToolbar from './components/EditToolbar'
 import MergeBrushesModal from './components/MergeBrushesModal'
+import CrossStitchPanel from './components/CrossStitchPanel'
+import CrossStitchLegend from './components/CrossStitchLegend'
+import { DMC_LIST, getDmcByHex, nearestDmc } from './utils/dmc'
+import {
+  AIDA_COUNTS,
+  DEFAULT_AIDA_COUNT,
+  EMPTY_COLOR,
+  HOOP_SIZES,
+  countCellsOutsideCircle,
+  getSymbol,
+} from './utils/crossStitch'
 
 const DEFAULT_PALETTE = ['#111111', '#ffffff', '#d14343', '#3b82f6']
+const DEFAULT_DMC_PALETTE = ['310', '321', '798', '444'].map(
+  (number) => DMC_LIST.find((color) => color.number === number).hex,
+)
 
 function App() {
   const [projectName, setProjectName] = useState('')
@@ -34,6 +48,13 @@ function App() {
   const [editTool, setEditTool] = useState('brush')
   const [showMergeModal, setShowMergeModal] = useState(false)
   const [pixelZoom, setPixelZoom] = useState(1)
+  const [craftInput, setCraftInput] = useState('crochet')
+  const [aidaCountInput, setAidaCountInput] = useState(String(DEFAULT_AIDA_COUNT))
+  const [hoopId, setHoopId] = useState('')
+  const [hoopCenter, setHoopCenter] = useState(null)
+  const [bwMode, setBwMode] = useState(false)
+
+  const isCrossStitch = project?.craft === 'crossStitch'
 
   const fileInputRef = useRef(null)
   const imageInputRef = useRef(null)
@@ -60,13 +81,20 @@ function App() {
     }
 
     setErrorMessage('')
+    const nextCraft = craftInput === 'crossStitch' ? 'crossStitch' : 'crochet'
+    const parsedAida = Number.parseInt(aidaCountInput, 10)
     setProject({
       name: projectName.trim() || 'Untitled Project',
       width: parsedWidth,
       height: parsedHeight,
+      craft: nextCraft,
+      aidaCount: AIDA_COUNTS.includes(parsedAida) ? parsedAida : DEFAULT_AIDA_COUNT,
     })
+    setHoopId('')
+    setHoopCenter(null)
+    setBwMode(false)
     setColorCount('4')
-    setPaletteColors(DEFAULT_PALETTE)
+    setPaletteColors(nextCraft === 'crossStitch' ? DEFAULT_DMC_PALETTE : DEFAULT_PALETTE)
     setSelectedBrushIndex(0)
     setPixelColors(Array.from({ length: parsedWidth * parsedHeight }, () => '#ffffff'))
     setEditorMode('edit')
@@ -81,6 +109,8 @@ function App() {
     setPixelColors([])
     setEditorMode('edit')
     setSelectedBrushIndex(0)
+    setHoopId('')
+    setHoopCenter(null)
     setPaletteColors(DEFAULT_PALETTE)
     setColorCount('4')
     setErrorMessage('')
@@ -113,7 +143,12 @@ function App() {
 
       const nextColors = [...previousColors]
       while (nextColors.length < nextColorCount) {
-        nextColors.push('#000000')
+        if (isCrossStitch) {
+          const unused = DMC_LIST.find((color) => !nextColors.includes(color.hex))
+          nextColors.push(unused ? unused.hex : '#000000')
+        } else {
+          nextColors.push('#000000')
+        }
       }
       return nextColors
     })
@@ -139,6 +174,44 @@ function App() {
       )
     }
   }
+
+  const symbolsByHex = useMemo(() => {
+    const map = {}
+    paletteColors.forEach((hex, index) => {
+      if (!(hex in map)) map[hex] = getSymbol(index)
+    })
+    return map
+  }, [paletteColors])
+
+  const legendEntries = useMemo(() => {
+    if (!isCrossStitch) return []
+    const counts = new Map()
+    for (const hex of pixelColors) {
+      if (hex !== EMPTY_COLOR) counts.set(hex, (counts.get(hex) ?? 0) + 1)
+    }
+    return paletteColors
+      .filter((hex, index) => counts.has(hex) && paletteColors.indexOf(hex) === index)
+      .map((hex) => {
+        const dmc = getDmcByHex(hex)
+        return {
+          hex,
+          symbol: symbolsByHex[hex],
+          dmcNumber: dmc?.number ?? null,
+          name: dmc?.name ?? hex,
+          count: counts.get(hex),
+        }
+      })
+  }, [isCrossStitch, paletteColors, pixelColors, symbolsByHex])
+
+  const hoop = useMemo(() => {
+    const hoopSize = HOOP_SIZES.find((size) => size.id === hoopId)
+    if (!project || !isCrossStitch || !hoopSize) return null
+    const cx = hoopCenter?.x ?? project.width / 2
+    const cy = hoopCenter?.y ?? project.height / 2
+    const radius = (hoopSize.inches * project.aidaCount) / 2
+    const { outside } = countCellsOutsideCircle(pixelColors, project.width, cx, cy, radius)
+    return { label: hoopSize.label, cx, cy, radius, outside, fits: outside === 0 }
+  }, [hoopCenter, hoopId, isCrossStitch, pixelColors, project])
 
   const selectedBrushColor = useMemo(
     () => paletteColors[selectedBrushIndex] ?? '#000000',
@@ -225,6 +298,9 @@ function App() {
       return
     }
     setEditorMode(nextMode)
+    if (nextMode === 'crossStitch') {
+      setHoopCenter(null)
+    }
     if (nextMode === 'crochet') {
       // Fresh crochet start defaults to the bottom row (side-to-side) / tier 0 (C2C).
       // Import logic restores progress and does NOT trigger this switchMode path.
@@ -249,6 +325,16 @@ function App() {
 
   const toggleBottomRowDirection = () => {
     setBottomRowDirection((prev) => (prev === 'right' ? 'left' : 'right'))
+  }
+
+  const handleAidaCountChange = (nextCount) => {
+    setProject((previous) => (previous ? { ...previous, aidaCount: nextCount } : previous))
+    setHoopCenter(null)
+  }
+
+  const handleHoopChange = (nextId) => {
+    setHoopId(nextId)
+    setHoopCenter(null)
   }
 
   const handleZoomIn = () => {
@@ -374,11 +460,13 @@ function App() {
     if (!project) return null
 
     return {
-      version: 2,
+      // Crochet projects keep the v2 format; cross stitch needs v3 (craft + aida count).
+      version: isCrossStitch ? 3 : 2,
       project: {
         name: project.name,
         width: project.width,
         height: project.height,
+        ...(isCrossStitch ? { craft: 'crossStitch', aidaCount: project.aidaCount } : {}),
       },
       paletteColors,
       pixelColors,
@@ -429,7 +517,7 @@ function App() {
         const text = String(reader.result)
         const parsed = JSON.parse(text)
 
-        if (!parsed || (parsed.version !== 1 && parsed.version !== 2)) {
+        if (!parsed || (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3)) {
           throw new Error('Unsupported or missing .tap version.')
         }
         if (!parsed.project) {
@@ -476,11 +564,20 @@ function App() {
             : 0
         const clampedTier = Math.max(0, Math.min(maxTierIndex, savedTier))
 
+        const nextCraft = parsed.project.craft === 'crossStitch' ? 'crossStitch' : 'crochet'
+        const savedAida = parsed.project.aidaCount
         setProject({
           name: parsed.project.name || 'Imported Project',
           width: nextWidth,
           height: nextHeight,
+          craft: nextCraft,
+          aidaCount: AIDA_COUNTS.includes(savedAida) ? savedAida : DEFAULT_AIDA_COUNT,
         })
+        setHoopId('')
+        setHoopCenter(null)
+        if ((nextCraft === 'crossStitch') !== isCrossStitch) {
+          setEditorMode('edit')
+        }
 
         setPaletteColors(nextPaletteColors)
         setColorCount(String(nextPaletteColors.length))
@@ -576,12 +673,22 @@ function App() {
         ])
       }
 
-      const { palette, indexMap } = quantizeMedianCut(pixels, desiredCount)
+      const quantized = quantizeMedianCut(pixels, desiredCount)
+      const { palette } = quantized
+      let { indexMap } = quantized
       if (!palette.length || indexMap.length !== pixels.length) {
         throw new Error('Failed to quantize image.')
       }
 
-      const nextPaletteColors = palette.map((c) => rgbToHex(c.r, c.g, c.b))
+      let nextPaletteColors = palette.map((c) => rgbToHex(c.r, c.g, c.b))
+      if (isCrossStitch) {
+        // Snap each quantized color to the closest official DMC thread (Lab distance),
+        // merging colors that land on the same thread.
+        const snapped = palette.map((c) => nearestDmc(c.r, c.g, c.b).hex)
+        nextPaletteColors = snapped.filter((hex, i) => snapped.indexOf(hex) === i)
+        const remap = snapped.map((hex) => nextPaletteColors.indexOf(hex))
+        indexMap = indexMap.map((paletteIndex) => remap[paletteIndex])
+      }
       const nextPixelColors = indexMap.map((paletteIndex) =>
         nextPaletteColors[
           Math.max(0, Math.min(nextPaletteColors.length - 1, paletteIndex))
@@ -610,7 +717,7 @@ function App() {
     <>
       <TopNav onNewProject={handleNewProject} />
       <main className="app">
-        <section className="panel">
+        <section className="panel controls-panel">
           {!project ? (
             <ProjectForm
               projectName={projectName}
@@ -619,6 +726,10 @@ function App() {
               onProjectNameChange={setProjectName}
               onWidthChange={setWidthInput}
               onHeightChange={setHeightInput}
+              craft={craftInput}
+              aidaCount={aidaCountInput}
+              onCraftChange={setCraftInput}
+              onAidaCountChange={setAidaCountInput}
               onSubmit={handleCreateProject}
               errorMessage={errorMessage}
             />
@@ -650,13 +761,23 @@ function App() {
                 >
                   Edit
                 </button>
-                <button
-                  type="button"
-                  className={editorMode === 'crochet' ? 'is-active' : ''}
-                  onClick={() => switchMode('crochet')}
-                >
-                  Crochet
-                </button>
+                {isCrossStitch ? (
+                  <button
+                    type="button"
+                    className={editorMode === 'crossStitch' ? 'is-active' : ''}
+                    onClick={() => switchMode('crossStitch')}
+                  >
+                    Cross Stitch
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={editorMode === 'crochet' ? 'is-active' : ''}
+                    onClick={() => switchMode('crochet')}
+                  >
+                    Crochet
+                  </button>
+                )}
               </div>
 
               {editorMode === 'edit' ? (
@@ -684,11 +805,26 @@ function App() {
                   colorCount={colorCount}
                   paletteColors={paletteColors}
                   selectedBrushIndex={selectedBrushIndex}
+                  craft={project.craft}
                   onColorCountChange={handleColorCountChange}
                   onSelectBrush={setSelectedBrushIndex}
                   onUpdateBrushColor={updateBrushColor}
                 />
               </>
+              ) : editorMode === 'crossStitch' ? (
+                <CrossStitchPanel
+                  width={project.width}
+                  height={project.height}
+                  aidaCount={project.aidaCount}
+                  onAidaCountChange={handleAidaCountChange}
+                  hoopId={hoopId}
+                  onHoopChange={handleHoopChange}
+                  hoopFit={hoop}
+                  onResetHoop={() => setHoopCenter(null)}
+                  bwMode={bwMode}
+                  onBwModeChange={setBwMode}
+                  onPrint={() => window.print()}
+                />
               ) : (
                 <CrochetPanel
                   activeRow={activeCrochetRow}
@@ -710,6 +846,7 @@ function App() {
       {showMergeModal && (
         <MergeBrushesModal
           paletteColors={paletteColors}
+          craft={project?.craft}
           onConfirm={handleMergeBrushes}
           onCancel={() => setShowMergeModal(false)}
         />
@@ -717,7 +854,7 @@ function App() {
 
         <section className="panel">
           {project ? (
-            <div className="pixel-grid-container">
+            <div className={`pixel-grid-container${isCrossStitch ? ' pixel-grid-container--legend' : ''}`}>
               <div className="pixel-zoom-controls">
                 <button
                   type="button"
@@ -749,11 +886,21 @@ function App() {
                 activeRowRuns={activeRowRuns}
                 rowDirections={crochetRowDirections}
                 pixelZoom={pixelZoom}
+                symbolsByHex={symbolsByHex}
+                bwMode={bwMode && editorMode === 'crossStitch'}
+                hoop={hoop}
+                onHoopMove={(x, y) => setHoopCenter({ x, y })}
                 onToggleBottomDirection={toggleBottomRowDirection}
                 onPixelPointerDown={handlePixelPointerDown}
                 onPixelPointerEnter={handlePixelPointerEnter}
                 onStopPainting={stopPainting}
               />
+              {isCrossStitch && (
+                <CrossStitchLegend
+                  entries={legendEntries}
+                  bwMode={bwMode && editorMode === 'crossStitch'}
+                />
+              )}
             </div>
           ) : (
             <p className="empty-state">

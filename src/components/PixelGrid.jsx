@@ -1,6 +1,7 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import CrochetC2cArrows from './CrochetC2cArrows'
 import CrochetRowArrows from './CrochetRowArrows'
+import { contrastColor, EMPTY_COLOR } from '../utils/crossStitch'
 import {
   getTierCellIndices,
   getTierIndexForPixelIndex,
@@ -18,14 +19,58 @@ function PixelGrid({
   activeRowRuns,
   rowDirections,
   pixelZoom,
+  symbolsByHex,
+  bwMode,
+  hoop,
+  onHoopMove,
   onToggleBottomDirection,
   onPixelPointerDown,
   onPixelPointerEnter,
   onStopPainting,
 }) {
+  const dragRef = useRef(null)
+  const hoopRef = useRef(null)
+  const hoopKey = hoop ? `${hoop.label}-${hoop.radius}` : ''
+
+  // The padding that makes room for the hoop pushes the pattern off-screen, so bring it into view.
+  useEffect(() => {
+    if (hoopKey && hoopRef.current?.scrollIntoView) {
+      hoopRef.current.scrollIntoView({ block: 'center', inline: 'center' })
+    }
+  }, [hoopKey])
   const cellSize = 18
   const cellGap = 1
   const cellPitch = (cellSize + cellGap) * pixelZoom
+
+  const isCrossStitch = project.craft === 'crossStitch'
+  const showHoop = isCrossStitch && editorMode === 'crossStitch' && hoop
+  const hoopRadiusPx = showHoop ? (hoop.radius * cellPitch) : 0
+
+  const handleHoopPointerDown = (event) => {
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    dragRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      cx: hoop.cx,
+      cy: hoop.cy,
+    }
+  }
+
+  const handleHoopPointerMove = (event) => {
+    const start = dragRef.current
+    if (!start) return
+    const nextX = start.cx + (event.clientX - start.x) / cellPitch
+    const nextY = start.cy + (event.clientY - start.y) / cellPitch
+    onHoopMove(
+      Math.max(0, Math.min(project.width, nextX)),
+      Math.max(0, Math.min(project.height, nextY)),
+    )
+  }
+
+  const handleHoopPointerUp = () => {
+    dragRef.current = null
+  }
 
   const isC2c = editorMode === 'crochet' && crochetPattern === 'cornerToCorner'
   const isSideToSide = editorMode === 'crochet' && crochetPattern === 'sideToSide'
@@ -108,7 +153,7 @@ function PixelGrid({
 
   const gridBody = (
     <div
-      className={`pixel-grid ${editorMode === 'crochet' ? 'is-crochet-mode' : ''}`}
+      className={`pixel-grid ${editorMode !== 'edit' ? 'is-crochet-mode' : ''}`}
       style={{
         gridTemplateColumns: `repeat(${project.width}, ${cellSize * pixelZoom}px)`,
         gap: `${cellGap * pixelZoom}px`,
@@ -137,13 +182,22 @@ function PixelGrid({
           }
         }
 
+        const pixelCol = pixelIndex % project.width
+        const isStitched = isCrossStitch && colorValue !== EMPTY_COLOR
+        const symbol = isStitched ? symbolsByHex?.[colorValue] : null
+        const tenClasses = isCrossStitch
+          ? `${(pixelCol + 1) % 10 === 0 ? ' ten-col' : ''}${(pixelRow + 1) % 10 === 0 ? ' ten-row' : ''}`
+          : ''
+
         return (
           <button
             key={pixelIndex}
             type="button"
-            className={`pixel-cell ${isActiveCrochet ? 'crochet-active-row' : ''} ${isCompletedCrochet ? 'crochet-completed-row' : ''}`}
+            className={`pixel-cell ${isActiveCrochet ? 'crochet-active-row' : ''} ${isCompletedCrochet ? 'crochet-completed-row' : ''}${isCrossStitch ? ' pixel-cell--stitch' : ''}${tenClasses}`}
             style={{
-              backgroundColor: colorValue,
+              backgroundColor: bwMode && isCrossStitch ? '#ffffff' : colorValue,
+              color: bwMode ? '#000000' : contrastColor(colorValue),
+              fontSize: isCrossStitch ? `${cellSize * 0.7 * pixelZoom}px` : undefined,
               width: `${cellSize * pixelZoom}px`,
               height: `${cellSize * pixelZoom}px`,
             }}
@@ -154,9 +208,29 @@ function PixelGrid({
             onPointerEnter={
               editorMode === 'edit' ? () => onPixelPointerEnter(pixelIndex) : undefined
             }
-          />
+          >
+            {symbol}
+          </button>
         )
       })}
+
+      {showHoop && (
+        <div
+          className={`hoop-overlay ${hoop.fits ? 'is-fit' : 'is-overflow'}`}
+          style={{
+            left: `${hoop.cx * cellPitch - hoopRadiusPx}px`,
+            top: `${hoop.cy * cellPitch - hoopRadiusPx}px`,
+            width: `${hoopRadiusPx * 2}px`,
+            height: `${hoopRadiusPx * 2}px`,
+          }}
+          ref={hoopRef}
+          role="img"
+          aria-label={`${hoop.label} hoop overlay`}
+          onPointerDown={handleHoopPointerDown}
+          onPointerMove={handleHoopPointerMove}
+          onPointerUp={handleHoopPointerUp}
+        />
+      )}
 
       {editorMode === 'crochet' &&
         !isC2c &&
@@ -266,13 +340,22 @@ function PixelGrid({
   const wrapped =
     isC2c && editorMode === 'crochet' && c2cGeometry ? c2cLayout : gridWithSideArrows
 
+  // The hoop can extend past the grid edges, so leave room around the grid for it.
+  const content = isCrossStitch ? (
+    <div className="cross-stitch-grid-wrap" style={{ padding: `${hoopRadiusPx}px` }}>
+      {wrapped}
+    </div>
+  ) : (
+    wrapped
+  )
+
   return (
     <div
-      className={`grid-scroll${isC2c ? ' grid-scroll--c2c' : ''}`}
+      className={`grid-scroll${isC2c ? ' grid-scroll--c2c' : ''}${isCrossStitch ? ' grid-scroll--stitch' : ''}`}
       onPointerUp={onStopPainting}
       onPointerLeave={onStopPainting}
     >
-      {wrapped}
+      {content}
     </div>
   )
 }
